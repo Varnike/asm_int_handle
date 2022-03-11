@@ -2,7 +2,6 @@
 .model tiny
 .code
 org 100h
-; xlab
 
 
 locals
@@ -33,8 +32,6 @@ New09		proc
 		xchg al, ah
 		out 61h, al
 
-		mov al, 20h
-		out 20h, al
 
 		push ds			; change current segment address
 		push cs			; use ?
@@ -49,7 +46,7 @@ New09		proc
 		mov di, 160d * HPOS + VPOS
 		push VIDEOSEG
 		pop es
-		mov si, offset scrn_buff
+		mov si, offset vbuff
 
 
 @@restore:	mov cx, 6
@@ -66,7 +63,7 @@ New09		proc
 		push VIDEOSEG
 		pop ds
 		mov si, 160d * HPOS + VPOS
-		mov di, offset scrn_buff
+		mov di, offset vbuff
 
 @@save_loop:	mov cx, 6
 
@@ -78,6 +75,9 @@ New09		proc
 
 
 @@skip:		pop ds			; restore ds
+	
+		mov al, 20h
+		out 20h, al
 
 		pop es bp di si dx cx bx ax
 		iret			; if hotkey pressed, 
@@ -93,12 +93,45 @@ New09		proc
 old09ofs	dw 0			; самоизменяющийся код
 old09seg	dw 0			; переходим к старому обработ.
 drflag		db 0
-scrn_buff	db 72d dup(?)
+vbuff	db 72d dup(?)
 
 New09		endp
 ;=================================================
 
 
+;-------------------------------------------------
+; vram_cmp
+;-------------------------------------------------
+; Entry: DS:SI - address of tmp buffer
+;	 ES:DI - address of video mem start
+;	 DS:BX - address of saved frame
+;-------------------------------------------------
+vram_cmp	proc
+
+@@cmp_loop:	repe cmpsb		; compare until first diff
+					; or buffs are equal
+		jne @@not_eq
+		ret
+
+@@not_eq:	dec di			; if characters are diff
+	
+		mov al, es:[di]		; update saved image
+		inc di
+
+		mov bx, si
+		add bx, offset vbuff - offset tmp - 1
+
+		mov ds:[bx], al
+
+		xor ax, ax
+		cmp cx, ax
+
+		jne @@cmp_loop		; continue comparing
+
+		ret
+vram_cmp	endp
+
+;-------------------------------------------------
 
 ;-------------------------------------------------
 ; Draws hex value of given number(from stack)
@@ -123,10 +156,10 @@ num_draw	proc
 		cld				; itoa uses std
 		
 		mov si, offset num_str
-		push VIDEOSEG
+		push cs
 		pop es
 		mov di, [bp + 6]
-		add di, (160d*(HPOS+1)+VPOS+2)
+		add di, offset tmp + LEN * 2 + 2
 
 		shr cx, 2d			; cx = 4d
 
@@ -164,9 +197,7 @@ num_draw	endp
 ;-------------------------------------------------
 New08		proc
 		
-		pushf				; NOTE
-		call  dword ptr cs:[old08ofs]	; NOTE
-
+		
 		push ax
 		xor ax, ax
 		cmp al, cs:[drflag]
@@ -176,21 +207,55 @@ New08		proc
 
 		push bp
 		mov bp, sp
-
+	
 		push cs	
-		pop ds	
-		
-		call draw
+		pop ds		
+		push VIDEOSEG
+		pop es
 
+		push 160d * HPOS + VPOS
+		pop di
+		mov si, offset tmp
+		mov bx, offset vbuff
+
+; comparing prev frame with real image
+@@cmp:		mov cx, LEN * 2
+
+		call vram_cmp
+
+		add di, 160d - LEN * 2
+		cmp di, 160d * HPOS + VPOS + (160d - LEN*2)*(HEIGHT+1)
+		jb @@cmp
+
+		call draw			; draw frame
+
+; draw all regs values
 		.set_draw 16, 0			; ax
-		.set_draw 14, 160d		; bx
-		.set_draw 12, 320d		; cx
-		.set_draw 10, 480d		; dx
+		.set_draw 14, LEN*2d		; bx
+		.set_draw 12, LEN*4d		; cx
+		.set_draw 10, LEN*6d		; dx
+
+; transfer frame from tmp to video mem
+		mov di, 160d * HPOS + VPOS
+		push VIDEOSEG
+		pop es
+		mov si, offset tmp
+
+@@transfer:	mov cx, 6
+
+		call strncpy
+
+		add di, 160d - LEN * 2
+		cmp di, 160d * HPOS + VPOS + (160d - LEN*2)*(HEIGHT+1)
+		jb @@transfer
 
 		pop bp ds es di si dx cx bx
 
-@@exit:		pop ax
-		iret				; NOTE
+@@exit:		pushf	
+		call  dword ptr cs:[old08ofs]
+
+		pop ax
+		iret
 
 New08		endp
 
