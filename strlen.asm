@@ -115,3 +115,38 @@ strncpy		endp
 ;-------------------------------------------------
 
 
+
+
+;-------------------------------------------------
+; strncmp - Compares up to num(CX value) characters
+; string ES:SI to those of the string ES:DI
+;-------------------------------------------------
+; Entry: ES:SI - first string address
+;	 ES:DI - second string address
+;	 CX - number of characters to compare
+;
+; Note:  Sets DF to 0
+;	 Sets same flags as CMP while comparing
+;	 last characters, so u can check which
+;	 strings character has bigger or lower value
+;
+; Exit:  AX - 0 if strings are equal, 1 overwise
+;
+; Destr: SI, DI
+;-------------------------------------------------
+strncmp		proc
+		
+		cld	
+		repe cmpsb
+		
+		jne @@not_eq
+		xor ax, ax	
+		ret
+
+@@not_eq:	mov ax, 01h
+		ret
+
+strncmp		endp
+;-------------------------------------------------
+
+

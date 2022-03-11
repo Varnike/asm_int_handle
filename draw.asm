@@ -4,7 +4,6 @@
 				
 		call DrawLine
 
-		add di, 160d - LEN * 2
 		endm
 ;-------------------------------------------------
 
@@ -16,14 +15,11 @@ draw		proc
 		mov bp, offset style1_top
 
 ; calculate top left frame position
-		mov ax, VPOS
-		mov dx, 160d
-		mul dx
-		add ax, HPOS
-		mov di, ax
+		mov di, offset tmp
 
 		mov ah, COLOR		; frame color
-		push VIDEOSEG
+
+		push cs
 		pop es
 
 		.set_draw		; draw top line
